@@ -16,12 +16,12 @@ RUN echo 'Acquire::https::Verify-Peer "false";' > /etc/apt/apt.conf.d/99verify-p
 
 #COPY ./sources.list /etc/apt/sources.list
 
+RUN apt-get -y update && \
+    apt-get -y install dpkg-dev apt-utils
+
 COPY fetchdebs.sh /usr/local/bin/fetchdebs.sh
 
 RUN chmod a+x /usr/local/bin/fetchdebs.sh
-
-RUN apt-get -y update && \
-    apt-get -y install dpkg-dev apt-utils
 
 WORKDIR /fetcheddebs
 

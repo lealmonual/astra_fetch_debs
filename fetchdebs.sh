@@ -42,10 +42,12 @@ get_dependencies() {
     
     # Get direct dependencies
     deps=$(apt-cache depends "$pkg" 2>/dev/null | 
-           grep '^\s*Depends:\|^\s*Pre-Depends:' | 
-           cut -d: -f2- | 
-           sed 's/^[[:space:]]*//;s/<//g;s/>//g' | 
-           grep -v '\[')
+           grep '^\s*Depends:\|^\s*Pre-Depends:|^\s*\w' | 
+           sed 's/^\s*Depends: //' |
+           sed 's/^\s*Pre-Depends: //' |
+           sed 's/<//;s/>//' |
+           sed 's/^\s*//' |
+           grep -v '^$')
     
     echo "$deps"
 }
@@ -118,19 +120,43 @@ done < "$PACKAGE_LIST"
 # Create repository files
 echo "Creating repository metadata..." | tee -a "$LOG_FILE"
 cd "$OUTPUT_DIR"
-dpkg-scanpackages . /dev/null | gzip -9c > Packages.gz
-apt-ftparchive release . > Release
+
+# Create proper repository structure
+mkdir -p dists/stable/main/binary-amd64
+
+# Move all .deb packages to a pool directory structure
+mkdir -p pool/main
+find . -maxdepth 1 -name "*.deb" -exec mv {} pool/main/ \;
+
+# Generate Packages files
+dpkg-scanpackages pool/main /dev/null > dists/stable/main/binary-amd64/Packages
+gzip -9c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+
+# Create Release file with proper distribution information
+cd dists/stable
+cat > Release <<EOF
+Origin: Local Repository
+Label: Local
+Suite: stable
+Codename: stable
+Architectures: amd64
+Components: main
+Description: Local package repository
+Date: $(date -R)
+EOF
+
+# Append the checksums section to the Release file
+apt-ftparchive release . >> Release
 cd "$CURRENT_DIR"
 
 echo "==================================================" | tee -a "$LOG_FILE"
 echo "Package download complete!" | tee -a "$LOG_FILE"
-echo "Total unique packages downloaded: $(ls -1 *.deb 2>/dev/null | wc -l)" | tee -a "$LOG_FILE"
-echo "Output directory: $(pwd)" | tee -a "$LOG_FILE"
+echo "Total unique packages downloaded: $(find "$OUTPUT_DIR" -name "*.deb" | wc -l)" | tee -a "$LOG_FILE"
+echo "Output directory: $OUTPUT_DIR" | tee -a "$LOG_FILE"
 echo "==================================================" | tee -a "$LOG_FILE"
 echo "To set up the repository on the offline machine, run:" | tee -a "$LOG_FILE"
 echo "  sudo mkdir -p /opt/local-repo" | tee -a "$LOG_FILE"
-echo "  sudo cp $(pwd)/*.deb /opt/local-repo/" | tee -a "$LOG_FILE"
-echo "  sudo cp $(pwd)/Packages.gz $(pwd)/Release /opt/local-repo/" | tee -a "$LOG_FILE"
-echo "  echo \"deb [trusted=yes] file:/opt/local-repo ./\" | sudo tee /etc/apt/sources.list.d/local-repo.list" | tee -a "$LOG_FILE"
+echo "  sudo cp -r \"$OUTPUT_DIR\"/* /opt/local-repo/" | tee -a "$LOG_FILE"
+echo "  echo \"deb [trusted=yes] file:/opt/local-repo stable main\" | sudo tee /etc/apt/sources.list.d/local-repo.list" | tee -a "$LOG_FILE"
 echo "  sudo apt-get update" | tee -a "$LOG_FILE"
 echo "  sudo apt-get install <package-name>" | tee -a "$LOG_FILE"

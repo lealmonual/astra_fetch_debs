@@ -46,7 +46,6 @@ get_dependencies() {
            sed 's/^\s*Depends: //' |
            sed 's/^\s*Pre-Depends: //' |
            sed 's/<//;s/>//' |
-           sed 's/^\s*//' |
            grep -v '^$')
     
     echo "$deps"
